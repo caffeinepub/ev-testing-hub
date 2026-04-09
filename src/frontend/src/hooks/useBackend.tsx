@@ -372,6 +372,24 @@ export function useUpdateUserRoleByUsername() {
   });
 }
 
+// ─── Records filtered by issue flag (client-side from cache) ─────────────────
+
+export function useRecordsByIssueFlag(flagKey: string) {
+  const { data: records = [], isLoading } = useTestRecords();
+  const filtered = records.filter((r) =>
+    r.issues.some((issue) => {
+      const name =
+        typeof issue.flag === "string"
+          ? issue.flag
+          : issue.flag && typeof issue.flag === "object"
+            ? (Object.keys(issue.flag as object)[0] ?? String(issue.flag))
+            : String(issue.flag);
+      return name === flagKey;
+    }),
+  );
+  return { data: filtered, isLoading };
+}
+
 // ─── Top Issues ───────────────────────────────────────────────────────────────
 
 export function useTopIssues(limit = 5) {

@@ -197,6 +197,11 @@ service : {
                             err: text;
                             ok: vec TestRecord;
                           }) query;
+  listTestRecordsByIssue: (issueFlag: IssueFlag) ->
+   (variant {
+      err: text;
+      ok: vec TestRecord;
+    }) query;
   listTestRecordsByModel: (modelId: ModelId) ->
    (variant {
       err: text;

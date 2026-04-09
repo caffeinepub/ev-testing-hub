@@ -222,6 +222,11 @@ export const idlService = IDL.Service({
       [IDL.Variant({ 'ok' : IDL.Vec(TestRecord), 'err' : IDL.Text })],
       ['query'],
     ),
+  'listTestRecordsByIssue' : IDL.Func(
+      [IssueFlag],
+      [IDL.Variant({ 'ok' : IDL.Vec(TestRecord), 'err' : IDL.Text })],
+      ['query'],
+    ),
   'listTestRecordsByModel' : IDL.Func(
       [ModelId],
       [IDL.Variant({ 'ok' : IDL.Vec(TestRecord), 'err' : IDL.Text })],
@@ -508,6 +513,11 @@ export const idlFactory = ({ IDL }) => {
     'listRoutes' : IDL.Func([], [IDL.Vec(Route)], ['query']),
     'listTestRecords' : IDL.Func(
         [],
+        [IDL.Variant({ 'ok' : IDL.Vec(TestRecord), 'err' : IDL.Text })],
+        ['query'],
+      ),
+    'listTestRecordsByIssue' : IDL.Func(
+        [IssueFlag],
         [IDL.Variant({ 'ok' : IDL.Vec(TestRecord), 'err' : IDL.Text })],
         ['query'],
       ),

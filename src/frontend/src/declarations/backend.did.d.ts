@@ -201,6 +201,11 @@ export interface _SERVICE {
     { 'ok' : Array<TestRecord> } |
       { 'err' : string }
   >,
+  'listTestRecordsByIssue' : ActorMethod<
+    [IssueFlag],
+    { 'ok' : Array<TestRecord> } |
+      { 'err' : string }
+  >,
   'listTestRecordsByModel' : ActorMethod<
     [ModelId],
     { 'ok' : Array<TestRecord> } |

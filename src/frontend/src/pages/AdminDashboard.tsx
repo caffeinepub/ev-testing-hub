@@ -15,12 +15,20 @@ import {
   Activity,
   AlertTriangle,
   Battery,
+  Calendar,
   Car,
+  ChevronRight,
   ClipboardList,
+  ExternalLink,
   MapPin,
+  Route,
   TrendingUp,
+  Users,
+  X,
   Zap,
 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   CartesianGrid,
   Legend,
@@ -32,12 +40,16 @@ import {
   YAxis,
 } from "recharts";
 import type { TestRecord } from "../backend";
+import { PhotoGallery } from "../components/PhotoGallery";
 import {
+  useRecordsByIssueFlag,
   useRoutes,
   useTestRecords,
   useTopIssues,
   useVehicleModels,
 } from "../hooks/useBackend";
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /** Compute top N issues from records client-side as a reliable fallback */
 function computeTopIssues(
@@ -56,7 +68,7 @@ function computeTopIssues(
     .slice(0, limit);
 }
 
-function getRideDate(record: {
+export function getRideDate(record: {
   dateOfRide?: bigint;
   timestamp: bigint;
 }): number {
@@ -85,6 +97,33 @@ const issueFlagColor: Record<string, string> = {
   Other: "text-muted-foreground bg-muted border-border",
 };
 
+const issueFlagBg: Record<string, string> = {
+  Safety: "bg-red-600",
+  Electrical: "bg-amber-500",
+  Mechanical: "bg-orange-500",
+  Software: "bg-blue-600",
+  Performance: "bg-primary",
+  Other: "bg-muted-foreground",
+};
+
+const issueFlagHeaderBg: Record<string, string> = {
+  Safety: "bg-red-50 border-red-200",
+  Electrical: "bg-amber-50 border-amber-200",
+  Mechanical: "bg-orange-50 border-orange-200",
+  Software: "bg-blue-50 border-blue-200",
+  Performance: "bg-primary/5 border-primary/20",
+  Other: "bg-muted border-border",
+};
+
+const issueFlagTextColor: Record<string, string> = {
+  Safety: "text-red-700",
+  Electrical: "text-amber-700",
+  Mechanical: "text-orange-700",
+  Software: "text-blue-700",
+  Performance: "text-primary",
+  Other: "text-muted-foreground",
+};
+
 const issueFlagIcon: Record<string, string> = {
   Safety: "🔴",
   Electrical: "⚡",
@@ -95,7 +134,7 @@ const issueFlagIcon: Record<string, string> = {
 };
 
 /** Extract the string key from an IssueFlag (enum string OR runtime object variant) */
-function issueFlagName(flag: unknown): string {
+export function issueFlagName(flag: unknown): string {
   if (typeof flag === "string") return flag;
   if (flag && typeof flag === "object") {
     const keys = Object.keys(flag as object);
@@ -104,7 +143,28 @@ function issueFlagName(flag: unknown): string {
   return String(flag);
 }
 
-function StatCard({
+function formatTestingMode(mode?: {
+  __kind__: string;
+  Other?: string;
+}): string {
+  if (!mode) return "—";
+  if (mode.__kind__ === "Other") return mode.Other || "Other";
+  return mode.__kind__;
+}
+
+function formatTestPurpose(purpose?: {
+  __kind__: string;
+  Others?: string;
+}): string {
+  if (!purpose) return "—";
+  if (purpose.__kind__ === "Others") return purpose.Others || "Others";
+  if (purpose.__kind__ === "ComponentTest") return "Component Test";
+  return purpose.__kind__;
+}
+
+// ─── StatCard ─────────────────────────────────────────────────────────────────
+
+export function StatCard({
   title,
   value,
   sub,
@@ -143,6 +203,487 @@ function StatCard({
   );
 }
 
+// ─── RecordDetailModal (inline, for drill-down use) ───────────────────────────
+
+function RecordDetailModal({
+  record,
+  onClose,
+}: {
+  record: TestRecord;
+  onClose: () => void;
+}) {
+  const date = new Date(getRideDate(record));
+
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [onClose]);
+
+  const fields: { label: string; value: React.ReactNode }[] = [
+    {
+      label: "Date of Ride",
+      value: date.toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+      }),
+    },
+    { label: "Rider", value: record.riderName },
+    { label: "Vehicle Model", value: record.vehicleModelName },
+    {
+      label: "Route",
+      value: record.customRoute
+        ? `${record.routeName} (Custom: ${record.customRoute})`
+        : record.routeName,
+    },
+    {
+      label: "Range",
+      value: `${record.rangeStartKm} km → ${record.rangeStopKm} km (${(record.rangeStopKm - record.rangeStartKm).toFixed(1)} km)`,
+    },
+    {
+      label: "Start SOC",
+      value: record.startSoc != null ? `${record.startSoc}%` : "—",
+    },
+    {
+      label: "Stop SOC",
+      value: record.stopSoc != null ? `${record.stopSoc}%` : "—",
+    },
+    { label: "Top Speed", value: `${record.topSpeedKmh} km/h` },
+    { label: "Avg Speed", value: `${record.avgSpeedKmh} km/h` },
+    {
+      label: "Testing Mode",
+      value: formatTestingMode(
+        record.testingMode as { __kind__: string; Other?: string } | undefined,
+      ),
+    },
+    {
+      label: "Rider Weight",
+      value: record.riderWeight != null ? `${record.riderWeight} kg` : "—",
+    },
+    {
+      label: "Co-rider Weight",
+      value: record.coRiderWeight != null ? `${record.coRiderWeight} kg` : "—",
+    },
+    {
+      label: "Test Purpose",
+      value: formatTestPurpose(
+        record.testPurpose as { __kind__: string; Others?: string } | undefined,
+      ),
+    },
+  ];
+
+  return createPortal(
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
+      <div
+        className="absolute inset-0 bg-black/60"
+        onClick={onClose}
+        onKeyDown={(e) => e.key === "Enter" && onClose()}
+        role="button"
+        tabIndex={-1}
+        aria-label="Close details"
+      />
+      <div className="relative z-10 w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl bg-background border border-border shadow-xl">
+        <div className="sticky top-0 bg-card border-b border-border px-5 py-4 flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-display font-bold text-foreground">
+              Test Session Details
+            </h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {record.vehicleModelName} · {record.routeName}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="ml-3 p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+            aria-label="Close details"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <div className="p-5 space-y-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+            {fields.map(({ label, value }) => (
+              <div key={label}>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide mb-0.5">
+                  {label}
+                </p>
+                <p className="text-sm font-medium text-foreground">{value}</p>
+              </div>
+            ))}
+          </div>
+          {/* Issues */}
+          <div>
+            <p className="text-xs text-muted-foreground uppercase tracking-wide mb-2">
+              Issues ({record.issues.length})
+            </p>
+            {record.issues.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No issues reported
+              </p>
+            ) : (
+              <div className="space-y-1.5">
+                {record.issues.map((issue, i) => (
+                  <div
+                    key={`${issueFlagName(issue.flag)}-${i}`}
+                    className="flex items-start gap-2 rounded-lg bg-destructive/5 border border-destructive/15 px-3 py-2"
+                  >
+                    <AlertTriangle
+                      size={13}
+                      className="text-destructive mt-0.5 shrink-0"
+                    />
+                    <div className="min-w-0">
+                      <span className="text-xs font-semibold text-destructive">
+                        {issueFlagName(issue.flag)}
+                      </span>
+                      {issue.description && (
+                        <p className="text-xs text-muted-foreground mt-0.5 break-words">
+                          {issue.description}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          {/* Photos */}
+          {record.photoUrls && record.photoUrls.length > 0 && (
+            <div>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide mb-2">
+                Photos ({record.photoUrls.length})
+              </p>
+              <PhotoGallery urls={record.photoUrls} maxVisible={8} />
+            </div>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+// ─── IssueDetailModal ─────────────────────────────────────────────────────────
+
+function IssueDetailModal({
+  flagKey,
+  totalCount,
+  onClose,
+}: {
+  flagKey: string;
+  totalCount: bigint;
+  onClose: () => void;
+}) {
+  const { data: records = [], isLoading } = useRecordsByIssueFlag(flagKey);
+  const [expandedRecord, setExpandedRecord] = useState<TestRecord | null>(null);
+
+  // Sort newest first
+  const sorted = [...records].sort((a, b) => getRideDate(b) - getRideDate(a));
+
+  // Summary stats
+  const dates = sorted.map((r) => getRideDate(r));
+  const firstDate = dates.length > 0 ? Math.min(...dates) : null;
+  const latestDate = dates.length > 0 ? Math.max(...dates) : null;
+  const uniqueRiders = new Set(sorted.map((r) => r.riderName)).size;
+  const uniqueVehicles = new Set(sorted.map((r) => r.vehicleModelName)).size;
+
+  const headerColor = issueFlagHeaderBg[flagKey] ?? "bg-muted border-border";
+  const textColor = issueFlagTextColor[flagKey] ?? "text-muted-foreground";
+  const dotColor = issueFlagBg[flagKey] ?? "bg-muted-foreground";
+
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (expandedRecord) {
+          setExpandedRecord(null);
+        } else {
+          onClose();
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [onClose, expandedRecord]);
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[9999] flex items-start justify-center p-3 sm:p-6 overflow-y-auto"
+      data-ocid="issue-detail-modal"
+    >
+      <div
+        className="fixed inset-0 bg-black/55"
+        onClick={onClose}
+        onKeyDown={(e) => e.key === "Enter" && onClose()}
+        role="button"
+        tabIndex={-1}
+        aria-label="Close issue detail"
+      />
+      <div className="relative z-10 w-full max-w-3xl rounded-2xl bg-background border border-border shadow-2xl my-4">
+        {/* Header */}
+        <div className={`rounded-t-2xl border-b px-5 py-5 ${headerColor}`}>
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div
+                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${dotColor} text-white text-xl`}
+              >
+                {issueFlagIcon[flagKey] ?? "⚠️"}
+              </div>
+              <div className="min-w-0">
+                <h2
+                  className={`text-xl font-display font-bold ${textColor} leading-tight`}
+                >
+                  {flagKey} Issues — Drill-Down
+                </h2>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  Detailed breakdown of all reported {flagKey.toLowerCase()}{" "}
+                  issues
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="shrink-0 p-2 rounded-lg hover:bg-black/10 text-muted-foreground hover:text-foreground transition-colors"
+              aria-label="Close"
+            >
+              <X size={20} />
+            </button>
+          </div>
+
+          {/* Big count badge */}
+          <div className="mt-4 flex items-center gap-2">
+            <span className={`text-4xl font-display font-bold ${textColor}`}>
+              {totalCount.toString()}
+            </span>
+            <span className="text-sm text-muted-foreground font-medium">
+              total occurrences across {sorted.length} test session
+              {sorted.length !== 1 ? "s" : ""}
+            </span>
+          </div>
+        </div>
+
+        {/* Summary cards */}
+        {!isLoading && sorted.length > 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 px-5 py-4 border-b border-border bg-muted/30">
+            <div className="text-center">
+              <div className="flex items-center justify-center gap-1.5 mb-1">
+                <Calendar size={13} className="text-muted-foreground" />
+                <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">
+                  First Seen
+                </span>
+              </div>
+              <p className="text-sm font-semibold text-foreground">
+                {firstDate
+                  ? new Date(firstDate).toLocaleDateString("en-IN", {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                    })
+                  : "—"}
+              </p>
+            </div>
+            <div className="text-center">
+              <div className="flex items-center justify-center gap-1.5 mb-1">
+                <Calendar size={13} className="text-muted-foreground" />
+                <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">
+                  Latest
+                </span>
+              </div>
+              <p className="text-sm font-semibold text-foreground">
+                {latestDate
+                  ? new Date(latestDate).toLocaleDateString("en-IN", {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                    })
+                  : "—"}
+              </p>
+            </div>
+            <div className="text-center">
+              <div className="flex items-center justify-center gap-1.5 mb-1">
+                <Users size={13} className="text-muted-foreground" />
+                <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">
+                  Riders
+                </span>
+              </div>
+              <p className="text-sm font-semibold text-foreground">
+                {uniqueRiders}
+              </p>
+            </div>
+            <div className="text-center">
+              <div className="flex items-center justify-center gap-1.5 mb-1">
+                <Car size={13} className="text-muted-foreground" />
+                <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">
+                  Vehicles
+                </span>
+              </div>
+              <p className="text-sm font-semibold text-foreground">
+                {uniqueVehicles}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Records list */}
+        <div className="max-h-[55vh] overflow-y-auto">
+          {isLoading ? (
+            <div className="p-5 space-y-3">
+              {["a", "b", "c"].map((k) => (
+                <Skeleton key={k} className="h-20 rounded-lg" />
+              ))}
+            </div>
+          ) : sorted.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <Zap size={32} className="text-muted-foreground mb-3" />
+              <p className="text-sm font-medium text-muted-foreground">
+                No records found for this issue
+              </p>
+            </div>
+          ) : (
+            <div className="divide-y divide-border">
+              {sorted.map((record, idx) => {
+                // Find only issues matching this flag
+                const matchingIssues = record.issues.filter(
+                  (iss) => issueFlagName(iss.flag) === flagKey,
+                );
+                const rideDate = new Date(getRideDate(record));
+
+                return (
+                  <div
+                    key={record.id.toString()}
+                    className="px-5 py-4 hover:bg-muted/25 transition-colors"
+                    data-ocid={`issue-record-row-${idx}`}
+                  >
+                    {/* Row header */}
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">
+                          {idx + 1}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-foreground truncate">
+                            {record.riderName}
+                            <span className="text-muted-foreground font-normal ml-1.5">
+                              ·
+                            </span>
+                            <span className="text-muted-foreground font-normal ml-1.5">
+                              {record.vehicleModelName}
+                            </span>
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {rideDate.toLocaleDateString("en-IN", {
+                              day: "2-digit",
+                              month: "short",
+                              year: "numeric",
+                            })}
+                            <span className="mx-1.5">·</span>
+                            {record.routeName}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedRecord(record)}
+                        className="shrink-0 flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-medium transition-colors px-2 py-1 rounded-md hover:bg-primary/8"
+                        data-ocid={`issue-record-detail-${idx}`}
+                        title="View full record"
+                      >
+                        <ExternalLink size={12} />
+                        <span className="hidden sm:inline">Full Details</span>
+                      </button>
+                    </div>
+
+                    {/* Matching issue descriptions */}
+                    <div className="space-y-1.5 mb-3">
+                      {matchingIssues.map((iss) => (
+                        <div
+                          key={iss.description ?? issueFlagName(iss.flag)}
+                          className={`flex items-start gap-2 rounded-md border px-3 py-2 text-xs ${issueFlagColor[flagKey] ?? "text-muted-foreground bg-muted border-border"}`}
+                        >
+                          <AlertTriangle
+                            size={11}
+                            className="mt-0.5 shrink-0"
+                          />
+                          <span className="break-words">
+                            {iss.description || `${flagKey} issue reported`}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Key data pills */}
+                    <div className="flex flex-wrap gap-2">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-xs text-muted-foreground">
+                        <Route size={10} />
+                        {(record.rangeStopKm - record.rangeStartKm).toFixed(1)}{" "}
+                        km
+                      </span>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-xs text-muted-foreground">
+                        <TrendingUp size={10} />↑{record.topSpeedKmh} / ~
+                        {record.avgSpeedKmh} km/h
+                      </span>
+                      {record.testingMode && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-xs text-muted-foreground">
+                          {formatTestingMode(
+                            record.testingMode as {
+                              __kind__: string;
+                              Other?: string;
+                            },
+                          )}{" "}
+                          mode
+                        </span>
+                      )}
+                      {record.testPurpose && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-xs text-muted-foreground">
+                          {formatTestPurpose(
+                            record.testPurpose as {
+                              __kind__: string;
+                              Others?: string;
+                            },
+                          )}
+                        </span>
+                      )}
+                      <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-xs text-muted-foreground">
+                        {record.issues.length} issue
+                        {record.issues.length !== 1 ? "s" : ""} total
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between px-5 py-3 border-t border-border bg-muted/20 rounded-b-2xl">
+          <p className="text-xs text-muted-foreground">
+            Showing {sorted.length} session{sorted.length !== 1 ? "s" : ""} ·
+            sorted newest first
+          </p>
+          <Button variant="outline" size="sm" onClick={onClose}>
+            Close
+          </Button>
+        </div>
+      </div>
+
+      {/* Record detail modal (nested) */}
+      {expandedRecord && (
+        <RecordDetailModal
+          record={expandedRecord}
+          onClose={() => setExpandedRecord(null)}
+        />
+      )}
+    </div>,
+    document.body,
+  );
+}
+
+// ─── Chart helpers ────────────────────────────────────────────────────────────
+
 function buildSpeedData(records: TestRecord[]) {
   return records.slice(-10).map((r, i) => ({
     label: `T${i + 1}`,
@@ -160,17 +701,45 @@ function buildRangeSocData(records: TestRecord[]) {
   }));
 }
 
+// ─── Main Dashboard ───────────────────────────────────────────────────────────
+
 export default function AdminDashboard() {
   const { data: records = [], isLoading: recordsLoading } = useTestRecords();
   const { data: topIssuesRaw = [], isLoading: issuesLoading } = useTopIssues(5);
   const { data: models = [], isLoading: modelsLoading } = useVehicleModels();
   const { data: routes = [], isLoading: routesLoading } = useRoutes();
 
+  const [selectedIssue, setSelectedIssue] = useState<{
+    flagKey: string;
+    count: bigint;
+  } | null>(null);
+
   // Use backend top issues; fall back to client-side computation if backend returns empty
   const topIssues: Array<[string, bigint]> =
     topIssuesRaw.length > 0
       ? topIssuesRaw.map(([flag, count]) => [issueFlagName(flag), count])
       : computeTopIssues(records, 5);
+
+  // Daily Run KM — sum of (stopKm - startKm) for records whose ride date is today
+  const todayStart = (() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  })();
+  const todayEnd = todayStart + 86_400_000;
+
+  const dailyRunKm = records.reduce((sum, r) => {
+    const rideMs = getRideDate(r);
+    if (rideMs >= todayStart && rideMs < todayEnd) {
+      return sum + Math.max(0, r.rangeStopKm - r.rangeStartKm);
+    }
+    return sum;
+  }, 0);
+
+  const overallTotalKm = records.reduce(
+    (sum, r) => sum + Math.max(0, r.rangeStopKm - r.rangeStartKm),
+    0,
+  );
 
   const totalRecords = records.length;
   const avgSoc =
@@ -251,6 +820,68 @@ export default function AdminDashboard() {
         </div>
       </div>
 
+      {/* KM highlight cards — Daily Run & Overall Total */}
+      <div className="grid grid-cols-2 gap-4">
+        {isStatsLoading ? (
+          ["a", "b"].map((k) => (
+            <Skeleton key={k} className="h-28 rounded-lg" />
+          ))
+        ) : (
+          <>
+            <Card
+              className="border-2 border-primary/30 bg-primary/5"
+              data-ocid="stat-daily-km"
+            >
+              <CardContent className="pt-5 pb-4">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-xs text-primary/70 uppercase tracking-wider font-semibold mb-1">
+                      Daily Run KM
+                    </p>
+                    <p className="text-3xl font-display font-bold text-primary">
+                      {dailyRunKm.toFixed(1)}
+                      <span className="text-lg font-medium ml-1">km</span>
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Total KM driven today
+                    </p>
+                  </div>
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/15 text-primary">
+                    <Route size={20} />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card
+              className="border-2 border-primary/20 bg-primary/3"
+              data-ocid="stat-overall-km"
+            >
+              <CardContent className="pt-5 pb-4">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-xs text-primary/70 uppercase tracking-wider font-semibold mb-1">
+                      Overall Total KM
+                    </p>
+                    <p className="text-3xl font-display font-bold text-foreground">
+                      {overallTotalKm.toFixed(1)}
+                      <span className="text-lg font-medium ml-1 text-muted-foreground">
+                        km
+                      </span>
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Cumulative across all records
+                    </p>
+                  </div>
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/8 text-primary">
+                    <TrendingUp size={20} />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </>
+        )}
+      </div>
+
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {isStatsLoading ? (
@@ -319,7 +950,8 @@ export default function AdminDashboard() {
                 ⚠ TOP 5 CRITICAL ISSUES / PROBLEMS
               </CardTitle>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Most frequent issues across all test records
+                Click any issue to see full drill-down with all records, dates,
+                and riders
               </p>
             </div>
           </div>
@@ -348,10 +980,13 @@ export default function AdminDashboard() {
             <div className="space-y-2">
               {topIssues.map(([flagKey, count], idx) => {
                 return (
-                  <div
+                  <button
                     key={flagKey}
-                    className={`flex items-center gap-3 rounded-lg border px-4 py-3 transition-smooth hover:shadow-sm ${idx === 0 ? "border-destructive/30 bg-red-100/60" : "border-border bg-card"}`}
+                    type="button"
+                    onClick={() => setSelectedIssue({ flagKey, count })}
+                    className={`w-full flex items-center gap-3 rounded-lg border px-4 py-3 transition-all hover:shadow-md hover:scale-[1.01] active:scale-[0.99] cursor-pointer text-left ${idx === 0 ? "border-destructive/30 bg-red-100/60 hover:bg-red-100" : "border-border bg-card hover:bg-muted/40"}`}
                     data-ocid={`issue-row-${idx}`}
+                    aria-label={`View details for ${flagKey} issues`}
                   >
                     <span className="text-base font-bold text-destructive w-5 shrink-0">
                       #{idx + 1}
@@ -378,13 +1013,26 @@ export default function AdminDashboard() {
                     >
                       {count.toString()} × reported
                     </Badge>
-                  </div>
+                    <ChevronRight
+                      size={16}
+                      className="text-muted-foreground shrink-0"
+                    />
+                  </button>
                 );
               })}
             </div>
           )}
         </CardContent>
       </Card>
+
+      {/* Issue drill-down modal */}
+      {selectedIssue && (
+        <IssueDetailModal
+          flagKey={selectedIssue.flagKey}
+          totalCount={selectedIssue.count}
+          onClose={() => setSelectedIssue(null)}
+        />
+      )}
 
       {/* Charts */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">

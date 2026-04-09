@@ -237,6 +237,13 @@ export interface backendInterface {
         __kind__: "err";
         err: string;
     }>;
+    listTestRecordsByIssue(issueFlag: IssueFlag): Promise<{
+        __kind__: "ok";
+        ok: Array<TestRecord>;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     listTestRecordsByModel(modelId: ModelId): Promise<{
         __kind__: "ok";
         ok: Array<TestRecord>;

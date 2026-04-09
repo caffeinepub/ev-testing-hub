@@ -173,6 +173,16 @@ module {
     };
   };
 
+  public func listTestRecordsByIssue(records : List.List<Types.TestRecord>, issueFlag : Types.IssueFlag) : [Types.TestRecord] {
+    records.filter(func(r) {
+      var found = false;
+      for (i in r.issues.values()) {
+        if (i.flag == issueFlag) { found := true };
+      };
+      found;
+    }).toArray();
+  };
+
   public func getTopIssues(records : List.List<Types.TestRecord>, limit : Nat) : [(Types.IssueFlag, Nat)] {
     // Count occurrences using Text keys for the variant
     let counts = Map.empty<Text, (Types.IssueFlag, Nat)>();

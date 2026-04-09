@@ -92,6 +92,7 @@ export const mockBackend: backendInterface = {
   listAllUsers: async () => ok(mockUsers),
   listRoutes: async () => mockRoutes,
   listTestRecords: async () => ok(mockTestRecords),
+  listTestRecordsByIssue: async (issueFlag) => ok(mockTestRecords.filter(r => r.issues.some(i => i.flag === issueFlag))),
   listTestRecordsByModel: async () => ok(mockTestRecords.slice(0, 2)),
   listTestRecordsByRider: async () => ok(mockTestRecords.slice(0, 2)),
   listTestRecordsByRoute: async () => ok(mockTestRecords.slice(0, 3)),

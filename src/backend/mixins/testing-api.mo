@@ -212,6 +212,13 @@ mixin (
     #ok(TestingLib.listTestRecordsByRider(testRecords, riderName));
   };
 
+  public query ({ caller }) func listTestRecordsByIssue(issueFlag : TestingTypes.IssueFlag) : async { #ok : [TestingTypes.TestRecord]; #err : Text } {
+    if (not UserLib.isAdmin(users, caller)) {
+      return #err("Unauthorized: Admin role required");
+    };
+    #ok(TestingLib.listTestRecordsByIssue(testRecords, issueFlag));
+  };
+
   public shared ({ caller }) func deleteTestRecord(id : Common.RecordId) : async { #ok : Bool; #err : Text } {
     if (not UserLib.isAdmin(users, caller)) {
       return #err("Unauthorized: Admin role required");

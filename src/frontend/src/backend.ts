@@ -319,6 +319,13 @@ export interface backendInterface {
         __kind__: "err";
         err: string;
     }>;
+    listTestRecordsByIssue(issueFlag: IssueFlag): Promise<{
+        __kind__: "ok";
+        ok: Array<TestRecord>;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     listTestRecordsByModel(modelId: ModelId): Promise<{
         __kind__: "ok";
         ok: Array<TestRecord>;
@@ -775,6 +782,26 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.listTestRecords();
+            return from_candid_variant_n66(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async listTestRecordsByIssue(arg0: IssueFlag): Promise<{
+        __kind__: "ok";
+        ok: Array<TestRecord>;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.listTestRecordsByIssue(to_candid_IssueFlag_n13(this._uploadFile, this._downloadFile, arg0));
+                return from_candid_variant_n66(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.listTestRecordsByIssue(to_candid_IssueFlag_n13(this._uploadFile, this._downloadFile, arg0));
             return from_candid_variant_n66(this._uploadFile, this._downloadFile, result);
         }
     }
