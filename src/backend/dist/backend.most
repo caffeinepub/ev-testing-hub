@@ -1,0 +1,151 @@
+// Version: 3.0.0
+type AiScoreFactors__140207161 =
+  {
+    behaviorScore : Float;
+    issueCount : Nat;
+    totalKm : Float;
+    workingDays : Nat
+  };
+type Int__270357528 = Int__616954475;
+type Int__616954475 = Int;
+type IssueFlag__680226285 =
+  {#Electrical; #Mechanical; #Other; #Performance; #Safety; #Software};
+type Issue__464002463 = {description : Text; flag : IssueFlag__680226285};
+type List__415060402<T> = List__790383201<T>;
+type List__790383201<T> =
+  {
+    var blockIndex : Nat__490723111;
+    var blocks : [var [var ?T]];
+    var elementIndex : Nat__490723111
+  };
+type ModelId__352750312 = Nat;
+type Nat__490723111 = Nat__920180692;
+type Nat__920180692 = Nat;
+type OldUserProfile__416069324 =
+  {
+    createdAt : Int;
+    name : Text;
+    passwordHash : ?Text;
+    principal : Principal;
+    role : OldUserRole__889293160;
+    username : ?Text
+  };
+type OldUserRole__889293160 = {#Admin; #Analyst; #Rider};
+type RecordId__634517021 = Nat;
+type RouteId__594135611 = Nat;
+type Route__274434604 =
+  {
+    createdAt : Timestamp__301639476;
+    description : Text;
+    distanceKm : Float;
+    id : RouteId__594135611;
+    name : Text
+  };
+type TestPurpose__278872721 =
+  {#ComponentTest; #Durability; #Others : Text; #Range};
+type TestRecord__1030225932 =
+  {
+    avgSpeedKmh : Float;
+    coRiderWeight : ?Float;
+    createdBy : Principal;
+    customRoute : ?Text;
+    dateOfRide : ?Timestamp__301639476;
+    id : RecordId__634517021;
+    issues : [Issue__464002463];
+    photoUrls : [Text];
+    rangeStartKm : Float;
+    rangeStopKm : Float;
+    riderName : Text;
+    riderWeight : ?Float;
+    routeId : RouteId__594135611;
+    routeName : Text;
+    startSoc : ?Float;
+    stopSoc : ?Float;
+    testPurpose : ?TestPurpose__278872721;
+    testingMode : ?TestingMode__1064279322;
+    timestamp : Timestamp__301639476;
+    topSpeedKmh : Float;
+    vehicleModelId : ModelId__352750312;
+    vehicleModelName : Text
+  };
+type TestingMode__1064279322 = {#City; #Eco; #Other : Text; #Sport};
+type Time__796480547 = Int__270357528;
+type Time__900049286 = Time__796480547;
+type Timestamp__301639476 = Time__900049286;
+type UserProfile__277265826 =
+  {
+    adminRating : ?Nat;
+    adminRatingComment : ?Text;
+    adminRatingTimestamp : ?Timestamp__301639476;
+    aiScore : ?Float;
+    aiScoreFactors : ?AiScoreFactors__140207161;
+    aiScoreTimestamp : ?Timestamp__301639476;
+    createdAt : Timestamp__301639476;
+    name : Text;
+    passwordHash : ?Text;
+    principal : Principal;
+    role : UserRole__41952412;
+    username : ?Text
+  };
+type UserRole__41952412 = {#Admin; #Analyst; #Rider};
+type VehicleModel__918873516 =
+  {
+    createdAt : Timestamp__301639476;
+    id : ModelId__352750312;
+    name : Text;
+    specs : Text;
+    vehicleType : VehicleType__540986529
+  };
+type VehicleType__540986529 = {#ThreeWheeler; #TwoWheeler};
+actor ({
+  stable modelCounter : {var value : Nat};
+  stable routeCounter : {var value : Nat};
+  stable routes :
+    {
+      var blockIndex : Nat__490723111;
+      var blocks : [var [var ?Route__274434604]];
+      var elementIndex : Nat__490723111
+    };
+  stable testRecordCounter : {var value : Nat};
+  stable testRecords :
+    {
+      var blockIndex : Nat__490723111;
+      var blocks : [var [var ?TestRecord__1030225932]];
+      var elementIndex : Nat__490723111
+    };
+  in users : List__415060402<OldUserProfile__416069324>;
+  stable vehicleModels :
+    {
+      var blockIndex : Nat__490723111;
+      var blocks : [var [var ?VehicleModel__918873516]];
+      var elementIndex : Nat__490723111
+    }
+}, {
+  stable modelCounter : {var value : Nat};
+  stable routeCounter : {var value : Nat};
+  stable routes :
+    {
+      var blockIndex : Nat__490723111;
+      var blocks : [var [var ?Route__274434604]];
+      var elementIndex : Nat__490723111
+    };
+  stable testRecordCounter : {var value : Nat};
+  stable testRecords :
+    {
+      var blockIndex : Nat__490723111;
+      var blocks : [var [var ?TestRecord__1030225932]];
+      var elementIndex : Nat__490723111
+    };
+  stable users :
+    {
+      var blockIndex : Nat__490723111;
+      var blocks : [var [var ?UserProfile__277265826]];
+      var elementIndex : Nat__490723111
+    };
+  stable vehicleModels :
+    {
+      var blockIndex : Nat__490723111;
+      var blocks : [var [var ?VehicleModel__918873516]];
+      var elementIndex : Nat__490723111
+    }
+}) ;

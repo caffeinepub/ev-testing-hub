@@ -1,0 +1,255 @@
+type VehicleType = 
+ variant {
+   ThreeWheeler;
+   TwoWheeler;
+ };
+type VehicleModel = 
+ record {
+   createdAt: Timestamp;
+   id: ModelId;
+   name: text;
+   specs: text;
+   vehicleType: VehicleType;
+ };
+type UserRole = 
+ variant {
+   Admin;
+   Analyst;
+   Rider;
+ };
+type UserProfile = 
+ record {
+   adminRating: opt nat;
+   adminRatingComment: opt text;
+   adminRatingTimestamp: opt Timestamp;
+   aiScore: opt float64;
+   aiScoreFactors: opt AiScoreFactors;
+   aiScoreTimestamp: opt Timestamp;
+   createdAt: Timestamp;
+   name: text;
+   passwordHash: opt text;
+   "principal": principal;
+   role: UserRole;
+   username: opt text;
+ };
+type Timestamp = int;
+type TestingMode = 
+ variant {
+   City;
+   Eco;
+   Other: text;
+   Sport;
+ };
+type TestRecord = 
+ record {
+   avgSpeedKmh: float64;
+   coRiderWeight: opt float64;
+   createdBy: principal;
+   customRoute: opt text;
+   dateOfRide: opt Timestamp;
+   id: RecordId;
+   issues: vec Issue;
+   photoUrls: vec text;
+   rangeStartKm: float64;
+   rangeStopKm: float64;
+   riderName: text;
+   riderWeight: opt float64;
+   routeId: RouteId;
+   routeName: text;
+   startSoc: opt float64;
+   stopSoc: opt float64;
+   testPurpose: opt TestPurpose;
+   testingMode: opt TestingMode;
+   timestamp: Timestamp;
+   topSpeedKmh: float64;
+   vehicleModelId: ModelId;
+   vehicleModelName: text;
+ };
+type TestPurpose = 
+ variant {
+   ComponentTest;
+   Durability;
+   Others: text;
+   Range;
+ };
+type RouteId = nat;
+type Route = 
+ record {
+   createdAt: Timestamp;
+   description: text;
+   distanceKm: float64;
+   id: RouteId;
+   name: text;
+ };
+type RiderRating = 
+ record {
+   adminRating: opt nat;
+   adminRatingComment: opt text;
+   adminRatingTimestamp: opt Timestamp;
+   aiScore: opt float64;
+   aiScoreFactors: opt AiScoreFactors;
+   aiScoreTimestamp: opt Timestamp;
+   username: text;
+ };
+type RecordId = nat;
+type ModelId = nat;
+type IssueFlag = 
+ variant {
+   Electrical;
+   Mechanical;
+   Other;
+   Performance;
+   Safety;
+   Software;
+ };
+type Issue = 
+ record {
+   description: text;
+   flag: IssueFlag;
+ };
+type AiScoreFactors = 
+ record {
+   behaviorScore: float64;
+   issueCount: nat;
+   totalKm: float64;
+   workingDays: nat;
+ };
+service : {
+  addRoute: (name: text, description: text, distanceKm: float64) ->
+   (variant {
+      err: text;
+      ok: Route;
+    });
+  addVehicleModel: (name: text, vehicleType: VehicleType, specs: text) ->
+   (variant {
+      err: text;
+      ok: VehicleModel;
+    });
+  adminCreateTestRecord: (vehicleModelId: ModelId, routeId: RouteId,
+   riderName: text, rangeStartKm: float64, rangeStopKm: float64, startSoc:
+   opt float64, stopSoc: opt float64, topSpeedKmh: float64, avgSpeedKmh:
+   float64, issues: vec Issue, photoUrls: opt vec text, testingMode:
+   opt TestingMode, customRoute: opt text, riderWeight: opt float64,
+   coRiderWeight: opt float64, testPurpose: opt TestPurpose, dateOfRide:
+   opt int) -> (variant {
+                  err: text;
+                  ok: TestRecord;
+                });
+  changePassword: (username: text, currentPassword: text, newPassword:
+   text) -> (variant {
+               err: text;
+               ok;
+             });
+  createUserByAdmin: (username: text, password: text, name: text, role:
+   UserRole) -> (variant {
+                   err: text;
+                   ok: UserProfile;
+                 });
+  deleteRoute: (id: RouteId) -> (variant {
+                                   err: text;
+                                   ok: bool;
+                                 });
+  deleteTestRecord: (id: RecordId) -> (variant {
+                                         err: text;
+                                         ok: bool;
+                                       });
+  deleteUser: ("principal": principal) -> (variant {
+                                             err: text;
+                                             ok: bool;
+                                           });
+  deleteUserByUsername: (username: text) -> (variant {
+                                               err: text;
+                                               ok: bool;
+                                             });
+  deleteVehicleModel: (id: ModelId) -> (variant {
+                                          err: text;
+                                          ok: bool;
+                                        });
+  getMyProfile: () -> (opt UserProfile) query;
+  getRiderRating: (username: text) ->
+   (variant {
+      err: text;
+      ok: opt RiderRating;
+    }) query;
+  getRoute: (id: RouteId) -> (opt Route) query;
+  getTestRecord: (id: RecordId) ->
+   (variant {
+      err: text;
+      ok: opt TestRecord;
+    }) query;
+  getTopIssues: (limit: nat) ->
+   (variant {
+      err: text;
+      ok: vec record {
+                IssueFlag;
+                nat;
+              };
+    }) query;
+  getUserByUsername: (username: text) -> (opt UserProfile) query;
+  getUserProfile: ("principal": principal) -> (opt UserProfile) query;
+  getVehicleModel: (id: ModelId) -> (opt VehicleModel) query;
+  listAllUsers: () -> (variant {
+                         err: text;
+                         ok: vec UserProfile;
+                       }) query;
+  listRoutes: () -> (vec Route) query;
+  listTestRecords: () -> (variant {
+                            err: text;
+                            ok: vec TestRecord;
+                          }) query;
+  listTestRecordsByModel: (modelId: ModelId) ->
+   (variant {
+      err: text;
+      ok: vec TestRecord;
+    }) query;
+  listTestRecordsByRider: (riderName: text) ->
+   (variant {
+      err: text;
+      ok: vec TestRecord;
+    }) query;
+  listTestRecordsByRoute: (routeId: RouteId) ->
+   (variant {
+      err: text;
+      ok: vec TestRecord;
+    }) query;
+  listVehicleModels: () -> (vec VehicleModel) query;
+  loginWithCredentials: (username: text, password: text) ->
+   (variant {
+      err: text;
+      ok: UserProfile;
+    });
+  recalculateRiderRating: (username: text) ->
+   (variant {
+      err: text;
+      ok: RiderRating;
+    });
+  registerSelf: (name: text) -> (variant {
+                                   err: text;
+                                   ok: UserProfile;
+                                 });
+  setAdminRatingForRider: (username: text, rating: nat, comment: opt text) ->
+   (variant {
+      err: text;
+      ok: RiderRating;
+    });
+  submitTestRecord: (vehicleModelId: ModelId, routeId: RouteId, riderName:
+   text, rangeStartKm: float64, rangeStopKm: float64, startSoc: opt float64,
+   stopSoc: opt float64, topSpeedKmh: float64, avgSpeedKmh: float64, issues:
+   vec Issue, photoUrls: opt vec text, testingMode: opt TestingMode,
+   customRoute: opt text, riderWeight: opt float64, coRiderWeight:
+   opt float64, testPurpose: opt TestPurpose, dateOfRide: opt int) ->
+   (variant {
+      err: text;
+      ok: TestRecord;
+    });
+  updateUserRole: ("principal": principal, newRole: UserRole) ->
+   (variant {
+      err: text;
+      ok: bool;
+    });
+  updateUserRoleByUsername: (username: text, newRole: UserRole) ->
+   (variant {
+      err: text;
+      ok: bool;
+    });
+}

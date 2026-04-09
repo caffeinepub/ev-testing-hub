@@ -1,0 +1,23 @@
+{
+  "overview": "EV Testing Hub is a full-stack dashboard for managing electric 2- and 3-wheeler test data. It supports Admin, Rider, and Analyst roles with data entry, analytics, bulk import, and now AI-powered rider rating profiles.",
+  "features": [
+    "Role-based access (Admin, Rider, Analyst)",
+    "Test record data entry with photo upload",
+    "AI-calculated rider rating on profiles",
+    "Admin manual rider rating with comments",
+    "Rating breakdown: KM, working days, issues, behavior",
+    "Bulk Excel import for Admin",
+    "PDF/Excel report export (Admin only)",
+    "Rider profile with stats and rating display",
+    "Rating excluded from exported reports"
+  ],
+  "category": "productivity",
+  "tags": [
+    "ev-testing",
+    "fleet-management",
+    "rider-analytics",
+    "dashboard",
+    "admin-tools"
+  ],
+  "last_updated": "2026-04-08T15:54:24.502Z"
+}
