@@ -1,4 +1,4 @@
-// Version: 3.0.0
+// Version: 1.0.0
 type AiScoreFactors__140207161 =
   {
     behaviorScore : Float;
@@ -11,26 +11,9 @@ type Int__616954475 = Int;
 type IssueFlag__680226285 =
   {#Electrical; #Mechanical; #Other; #Performance; #Safety; #Software};
 type Issue__464002463 = {description : Text; flag : IssueFlag__680226285};
-type List__415060402<T> = List__790383201<T>;
-type List__790383201<T> =
-  {
-    var blockIndex : Nat__490723111;
-    var blocks : [var [var ?T]];
-    var elementIndex : Nat__490723111
-  };
 type ModelId__352750312 = Nat;
 type Nat__490723111 = Nat__920180692;
 type Nat__920180692 = Nat;
-type OldUserProfile__416069324 =
-  {
-    createdAt : Int;
-    name : Text;
-    passwordHash : ?Text;
-    principal : Principal;
-    role : OldUserRole__889293160;
-    username : ?Text
-  };
-type OldUserRole__889293160 = {#Admin; #Analyst; #Rider};
 type RecordId__634517021 = Nat;
 type RouteId__594135611 = Nat;
 type Route__274434604 =
@@ -97,30 +80,7 @@ type VehicleModel__918873516 =
     vehicleType : VehicleType__540986529
   };
 type VehicleType__540986529 = {#ThreeWheeler; #TwoWheeler};
-actor ({
-  stable modelCounter : {var value : Nat};
-  stable routeCounter : {var value : Nat};
-  stable routes :
-    {
-      var blockIndex : Nat__490723111;
-      var blocks : [var [var ?Route__274434604]];
-      var elementIndex : Nat__490723111
-    };
-  stable testRecordCounter : {var value : Nat};
-  stable testRecords :
-    {
-      var blockIndex : Nat__490723111;
-      var blocks : [var [var ?TestRecord__1030225932]];
-      var elementIndex : Nat__490723111
-    };
-  in users : List__415060402<OldUserProfile__416069324>;
-  stable vehicleModels :
-    {
-      var blockIndex : Nat__490723111;
-      var blocks : [var [var ?VehicleModel__918873516]];
-      var elementIndex : Nat__490723111
-    }
-}, {
+actor {
   stable modelCounter : {var value : Nat};
   stable routeCounter : {var value : Nat};
   stable routes :
@@ -148,4 +108,4 @@ actor ({
       var blocks : [var [var ?VehicleModel__918873516]];
       var elementIndex : Nat__490723111
     }
-}) ;
+};

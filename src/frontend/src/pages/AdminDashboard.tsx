@@ -22,9 +22,8 @@ import {
   Zap,
 } from "lucide-react";
 import {
-  Bar,
-  BarChart,
   CartesianGrid,
+  Legend,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -32,7 +31,6 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { IssueFlag } from "../backend";
 import type { TestRecord } from "../backend";
 import {
   useRoutes,
@@ -40,6 +38,23 @@ import {
   useTopIssues,
   useVehicleModels,
 } from "../hooks/useBackend";
+
+/** Compute top N issues from records client-side as a reliable fallback */
+function computeTopIssues(
+  records: TestRecord[],
+  limit: number,
+): Array<[string, bigint]> {
+  const counts = new Map<string, bigint>();
+  for (const r of records) {
+    for (const issue of r.issues) {
+      const key = issueFlagName(issue.flag);
+      counts.set(key, (counts.get(key) ?? BigInt(0)) + BigInt(1));
+    }
+  }
+  return [...counts.entries()]
+    .sort((a, b) => (a[1] > b[1] ? -1 : a[1] < b[1] ? 1 : 0))
+    .slice(0, limit);
+}
 
 function getRideDate(record: {
   dateOfRide?: bigint;
@@ -61,23 +76,33 @@ const TOOLTIP_STYLE = {
 };
 const TOOLTIP_LABEL = { color: "oklch(0.145 0 0)" };
 
-const issueFlagColor: Record<IssueFlag, string> = {
-  [IssueFlag.Safety]: "text-red-600 bg-red-50 border-red-200",
-  [IssueFlag.Electrical]: "text-amber-600 bg-amber-50 border-amber-200",
-  [IssueFlag.Mechanical]: "text-orange-600 bg-orange-50 border-orange-200",
-  [IssueFlag.Software]: "text-blue-600 bg-blue-50 border-blue-200",
-  [IssueFlag.Performance]: "text-primary bg-primary/8 border-primary/25",
-  [IssueFlag.Other]: "text-muted-foreground bg-muted border-border",
+const issueFlagColor: Record<string, string> = {
+  Safety: "text-red-600 bg-red-50 border-red-200",
+  Electrical: "text-amber-600 bg-amber-50 border-amber-200",
+  Mechanical: "text-orange-600 bg-orange-50 border-orange-200",
+  Software: "text-blue-600 bg-blue-50 border-blue-200",
+  Performance: "text-primary bg-primary/8 border-primary/25",
+  Other: "text-muted-foreground bg-muted border-border",
 };
 
-const issueFlagIcon: Record<IssueFlag, string> = {
-  [IssueFlag.Safety]: "🔴",
-  [IssueFlag.Electrical]: "⚡",
-  [IssueFlag.Mechanical]: "🔧",
-  [IssueFlag.Software]: "💻",
-  [IssueFlag.Performance]: "📊",
-  [IssueFlag.Other]: "⚠️",
+const issueFlagIcon: Record<string, string> = {
+  Safety: "🔴",
+  Electrical: "⚡",
+  Mechanical: "🔧",
+  Software: "💻",
+  Performance: "📊",
+  Other: "⚠️",
 };
+
+/** Extract the string key from an IssueFlag (enum string OR runtime object variant) */
+function issueFlagName(flag: unknown): string {
+  if (typeof flag === "string") return flag;
+  if (flag && typeof flag === "object") {
+    const keys = Object.keys(flag as object);
+    if (keys.length > 0) return keys[0];
+  }
+  return String(flag);
+}
 
 function StatCard({
   title,
@@ -137,16 +162,31 @@ function buildRangeSocData(records: TestRecord[]) {
 
 export default function AdminDashboard() {
   const { data: records = [], isLoading: recordsLoading } = useTestRecords();
-  const { data: topIssues = [], isLoading: issuesLoading } = useTopIssues(5);
+  const { data: topIssuesRaw = [], isLoading: issuesLoading } = useTopIssues(5);
   const { data: models = [], isLoading: modelsLoading } = useVehicleModels();
   const { data: routes = [], isLoading: routesLoading } = useRoutes();
+
+  // Use backend top issues; fall back to client-side computation if backend returns empty
+  const topIssues: Array<[string, bigint]> =
+    topIssuesRaw.length > 0
+      ? topIssuesRaw.map(([flag, count]) => [issueFlagName(flag), count])
+      : computeTopIssues(records, 5);
 
   const totalRecords = records.length;
   const avgSoc =
     records.length > 0
-      ? Math.round(
-          records.reduce((s, r) => s + (r.startSoc ?? 0), 0) / records.length,
-        )
+      ? (() => {
+          const withBoth = records.filter(
+            (r) => r.startSoc != null && r.stopSoc != null,
+          );
+          if (withBoth.length === 0) return 0;
+          return Math.round(
+            withBoth.reduce(
+              (s, r) => s + ((r.startSoc ?? 0) - (r.stopSoc ?? 0)),
+              0,
+            ) / withBoth.length,
+          );
+        })()
       : 0;
   const avgRange =
     records.length > 0
@@ -251,9 +291,9 @@ export default function AdminDashboard() {
       {/* Avg stats row */}
       <div className="grid grid-cols-2 gap-4">
         <StatCard
-          title="Avg Start SOC %"
+          title="Avg Used SOC %"
           value={`${avgSoc}%`}
-          sub="Across all tests"
+          sub="Avg SOC consumed per test"
           icon={<Battery size={20} />}
         />
         <StatCard
@@ -285,7 +325,7 @@ export default function AdminDashboard() {
           </div>
         </CardHeader>
         <CardContent>
-          {issuesLoading ? (
+          {issuesLoading && recordsLoading ? (
             <div className="space-y-3">
               {["a", "b", "c", "d", "e"].map((k) => (
                 <Skeleton key={k} className="h-12 rounded-md" />
@@ -306,39 +346,41 @@ export default function AdminDashboard() {
             </div>
           ) : (
             <div className="space-y-2">
-              {topIssues.map(([flag, count], idx) => (
-                <div
-                  key={flag}
-                  className={`flex items-center gap-3 rounded-lg border px-4 py-3 transition-smooth hover:shadow-sm ${idx === 0 ? "border-destructive/30 bg-red-100/60" : "border-border bg-card"}`}
-                  data-ocid={`issue-row-${idx}`}
-                >
-                  <span className="text-base font-bold text-destructive w-5 shrink-0">
-                    #{idx + 1}
-                  </span>
-                  <span className="text-base shrink-0">
-                    {issueFlagIcon[flag as IssueFlag] ?? "⚠️"}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-foreground truncate">
-                      {flag} Issue
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Category: {flag}
-                    </p>
+              {topIssues.map(([flagKey, count], idx) => {
+                return (
+                  <div
+                    key={flagKey}
+                    className={`flex items-center gap-3 rounded-lg border px-4 py-3 transition-smooth hover:shadow-sm ${idx === 0 ? "border-destructive/30 bg-red-100/60" : "border-border bg-card"}`}
+                    data-ocid={`issue-row-${idx}`}
+                  >
+                    <span className="text-base font-bold text-destructive w-5 shrink-0">
+                      #{idx + 1}
+                    </span>
+                    <span className="text-base shrink-0">
+                      {issueFlagIcon[flagKey] ?? "⚠️"}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-foreground truncate">
+                        {flagKey} Issue
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Category: {flagKey}
+                      </p>
+                    </div>
+                    <span
+                      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium shrink-0 ${issueFlagColor[flagKey] ?? "text-muted-foreground bg-muted border-border"}`}
+                    >
+                      {flagKey}
+                    </span>
+                    <Badge
+                      variant="outline"
+                      className="text-xs shrink-0 border-destructive/30 text-destructive"
+                    >
+                      {count.toString()} × reported
+                    </Badge>
                   </div>
-                  <span
-                    className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium shrink-0 ${issueFlagColor[flag as IssueFlag] ?? ""}`}
-                  >
-                    {flag}
-                  </span>
-                  <Badge
-                    variant="outline"
-                    className="text-xs shrink-0 border-destructive/30 text-destructive"
-                  >
-                    {count.toString()} × reported
-                  </Badge>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>
@@ -421,7 +463,7 @@ export default function AdminDashboard() {
               <div className="overflow-x-auto">
                 <div className="min-w-[280px]">
                   <ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={rangeSocData}>
+                    <LineChart data={rangeSocData}>
                       <CartesianGrid
                         strokeDasharray="3 3"
                         stroke={CHART_GRID}
@@ -435,25 +477,32 @@ export default function AdminDashboard() {
                         contentStyle={TOOLTIP_STYLE}
                         labelStyle={TOOLTIP_LABEL}
                       />
-                      <Bar
+                      <Legend wrapperStyle={{ fontSize: 10 }} />
+                      <Line
+                        type="monotone"
                         dataKey="range"
-                        fill="oklch(0.45 0.15 230)"
-                        radius={[4, 4, 0, 0]}
+                        stroke="oklch(0.45 0.15 230)"
+                        strokeWidth={2}
+                        dot={false}
                         name="Range (km)"
                       />
-                      <Bar
+                      <Line
+                        type="monotone"
                         dataKey="startSoc"
-                        fill="oklch(0.60 0.18 200)"
-                        radius={[4, 4, 0, 0]}
-                        name="Start SOC %"
+                        stroke="oklch(0.60 0.18 200)"
+                        strokeWidth={2}
+                        dot={false}
+                        name="Start SOC%"
                       />
-                      <Bar
+                      <Line
+                        type="monotone"
                         dataKey="stopSoc"
-                        fill="oklch(0.55 0.16 160)"
-                        radius={[4, 4, 0, 0]}
-                        name="Stop SOC %"
+                        stroke="oklch(0.55 0.16 160)"
+                        strokeWidth={2}
+                        dot={false}
+                        name="Stop SOC%"
                       />
-                    </BarChart>
+                    </LineChart>
                   </ResponsiveContainer>
                 </div>
               </div>

@@ -23,13 +23,16 @@ import {
   BarChart3,
   Camera,
   CheckCircle2,
+  Eye,
   Filter,
   Search,
   TrendingUp,
+  X,
   Zap,
 } from "lucide-react";
-import { Fragment, useMemo, useState } from "react";
-import type { TestPurpose, TestingMode } from "../backend";
+import { Fragment, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import type { TestPurpose, TestRecord, TestingMode } from "../backend";
 import { PhotoGallery } from "../components/PhotoGallery";
 import { useAuth } from "../hooks/useAuth";
 import { useTestRecords, useVehicleModels } from "../hooks/useBackend";
@@ -57,6 +60,193 @@ function getRideDate(record: {
   return Number(record.timestamp) / 1_000_000;
 }
 
+function issueFlagName(flag: unknown): string {
+  if (typeof flag === "string") return flag;
+  if (flag && typeof flag === "object") {
+    const keys = Object.keys(flag as object);
+    if (keys.length > 0) return keys[0];
+  }
+  return String(flag);
+}
+
+/** Full record detail modal — rendered via portal to document.body */
+function RecordDetailModal({
+  record,
+  onClose,
+}: {
+  record: TestRecord;
+  onClose: () => void;
+}) {
+  const date = new Date(getRideDate(record));
+
+  // Close on Escape
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [onClose]);
+
+  const fields: { label: string; value: React.ReactNode }[] = [
+    {
+      label: "Date of Ride",
+      value: date.toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+      }),
+    },
+    { label: "Vehicle Model", value: record.vehicleModelName },
+    {
+      label: "Route",
+      value: record.customRoute
+        ? `${record.routeName} (Custom: ${record.customRoute})`
+        : record.routeName,
+    },
+    {
+      label: "Range",
+      value: `${record.rangeStartKm} km → ${record.rangeStopKm} km (${(record.rangeStopKm - record.rangeStartKm).toFixed(1)} km)`,
+    },
+    {
+      label: "Start SOC",
+      value: record.startSoc != null ? `${record.startSoc}%` : "—",
+    },
+    {
+      label: "Stop SOC",
+      value: record.stopSoc != null ? `${record.stopSoc}%` : "—",
+    },
+    { label: "Top Speed", value: `${record.topSpeedKmh} km/h` },
+    { label: "Avg Speed", value: `${record.avgSpeedKmh} km/h` },
+    { label: "Testing Mode", value: formatTestingMode(record.testingMode) },
+    {
+      label: "Rider Weight",
+      value: record.riderWeight != null ? `${record.riderWeight} kg` : "—",
+    },
+    {
+      label: "Co-rider Weight",
+      value: record.coRiderWeight != null ? `${record.coRiderWeight} kg` : "—",
+    },
+    { label: "Test Purpose", value: formatTestPurpose(record.testPurpose) },
+  ];
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+      data-ocid="record-detail-modal"
+    >
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-black/50"
+        onClick={onClose}
+        onKeyDown={(e) => e.key === "Enter" && onClose()}
+        role="button"
+        tabIndex={-1}
+        aria-label="Close details"
+      />
+
+      {/* Panel */}
+      <div className="relative z-10 w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl bg-background border border-border shadow-xl">
+        {/* Header */}
+        <div className="sticky top-0 bg-card border-b border-border px-5 py-4 flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-display font-bold text-foreground">
+              Test Session Details
+            </h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {record.vehicleModelName} · {record.routeName}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="ml-3 p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+            aria-label="Close details"
+            data-ocid="close-record-detail"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="p-5 space-y-5">
+          {/* Key fields grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+            {fields.map(({ label, value }) => (
+              <div key={label}>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide mb-0.5">
+                  {label}
+                </p>
+                <p className="text-sm font-medium text-foreground">{value}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Issues */}
+          <div>
+            <p className="text-xs text-muted-foreground uppercase tracking-wide mb-2">
+              Issues ({record.issues.length})
+            </p>
+            {record.issues.length === 0 ? (
+              <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                <CheckCircle2 size={14} className="text-green-600" />
+                No issues reported
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                {record.issues.map((issue, i) => (
+                  <div
+                    key={`issue-${issueFlagName(issue.flag)}-${i}`}
+                    className="flex items-start gap-2 rounded-lg bg-destructive/5 border border-destructive/15 px-3 py-2"
+                  >
+                    <AlertTriangle
+                      size={13}
+                      className="text-destructive mt-0.5 shrink-0"
+                    />
+                    <div className="min-w-0">
+                      <span className="text-xs font-semibold text-destructive">
+                        {issueFlagName(issue.flag)}
+                      </span>
+                      {issue.description && (
+                        <p className="text-xs text-muted-foreground mt-0.5 break-words">
+                          {issue.description}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Notes */}
+          {(record as TestRecord & { notes?: string }).notes && (
+            <div>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5">
+                Notes / Remarks
+              </p>
+              <p className="text-sm text-foreground bg-muted/40 rounded-lg px-3 py-2 break-words">
+                {(record as TestRecord & { notes?: string }).notes}
+              </p>
+            </div>
+          )}
+
+          {/* Photos */}
+          {record.photoUrls && record.photoUrls.length > 0 && (
+            <div>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide mb-2">
+                Photos ({record.photoUrls.length})
+              </p>
+              <PhotoGallery urls={record.photoUrls} maxVisible={8} />
+            </div>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 export default function RiderRecords() {
   const { profile } = useAuth();
   const { data: allRecords = [], isLoading } = useTestRecords();
@@ -65,6 +255,7 @@ export default function RiderRecords() {
   const [search, setSearch] = useState("");
   const [modelFilter, setModelFilter] = useState("all");
   const [expandedRecord, setExpandedRecord] = useState<string | null>(null);
+  const [detailRecord, setDetailRecord] = useState<TestRecord | null>(null);
 
   const records = useMemo(
     () => allRecords.filter((r) => r.riderName === profile?.name),
@@ -291,16 +482,10 @@ export default function RiderRecords() {
                       Avg Speed
                     </TableHead>
                     <TableHead className="text-xs font-semibold text-muted-foreground">
-                      Mode
-                    </TableHead>
-                    <TableHead className="text-xs font-semibold text-muted-foreground">
-                      Purpose
-                    </TableHead>
-                    <TableHead className="text-xs font-semibold text-muted-foreground">
                       Issues
                     </TableHead>
                     <TableHead className="text-xs font-semibold text-muted-foreground">
-                      Photos
+                      Actions
                     </TableHead>
                   </TableRow>
                 </TableHeader>
@@ -317,7 +502,6 @@ export default function RiderRecords() {
                     return (
                       <Fragment key={recId}>
                         <TableRow
-                          key={recId}
                           className="border-border hover:bg-muted/20 transition-smooth"
                           data-ocid={`rider-record-${record.id}`}
                         >
@@ -372,12 +556,6 @@ export default function RiderRecords() {
                           <TableCell className="text-right text-sm font-mono text-muted-foreground">
                             {record.avgSpeedKmh} km/h
                           </TableCell>
-                          <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                            {formatTestingMode(record.testingMode)}
-                          </TableCell>
-                          <TableCell className="text-sm text-muted-foreground max-w-[110px] truncate">
-                            {formatTestPurpose(record.testPurpose)}
-                          </TableCell>
                           <TableCell>
                             {record.issues.length > 0 ? (
                               <div className="flex items-center gap-1.5">
@@ -400,24 +578,34 @@ export default function RiderRecords() {
                             )}
                           </TableCell>
                           <TableCell>
-                            {hasPhotos ? (
+                            <div className="flex items-center gap-1.5">
+                              {/* View details button */}
                               <button
                                 type="button"
-                                onClick={() =>
-                                  setExpandedRecord(isExpanded ? null : recId)
-                                }
-                                className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-smooth"
-                                aria-label="Toggle photos"
-                                data-ocid={`toggle-photos-${recId}`}
+                                onClick={() => setDetailRecord(record)}
+                                className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-medium transition-smooth bg-primary/8 hover:bg-primary/15 px-2 py-1 rounded-md"
+                                aria-label="View full record details"
+                                data-ocid={`view-details-${recId}`}
                               >
-                                <Camera size={12} />
-                                {record.photoUrls.length}
+                                <Eye size={11} />
+                                Details
                               </button>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">
-                                —
-                              </span>
-                            )}
+                              {/* Photos toggle */}
+                              {hasPhotos && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setExpandedRecord(isExpanded ? null : recId)
+                                  }
+                                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-smooth"
+                                  aria-label="Toggle photos"
+                                  data-ocid={`toggle-photos-${recId}`}
+                                >
+                                  <Camera size={11} />
+                                  {record.photoUrls.length}
+                                </button>
+                              )}
+                            </div>
                           </TableCell>
                         </TableRow>
                         {isExpanded && hasPhotos && (
@@ -425,14 +613,14 @@ export default function RiderRecords() {
                             key={`${recId}-photos`}
                             className="border-border bg-muted/10"
                           >
-                            <TableCell colSpan={12} className="py-3 px-4">
+                            <TableCell colSpan={10} className="py-3 px-4">
                               <div className="flex items-center gap-2 mb-1">
                                 <Camera
                                   size={13}
                                   className="text-muted-foreground"
                                 />
                                 <span className="text-xs text-muted-foreground font-medium">
-                                  Session captures
+                                  Session captures ({record.photoUrls.length})
                                 </span>
                               </div>
                               <PhotoGallery urls={record.photoUrls} />
@@ -449,7 +637,7 @@ export default function RiderRecords() {
         </CardContent>
       </Card>
 
-      {/* Average Top Speed highlight */}
+      {/* Average stats highlight */}
       {records.length > 0 && (
         <div className="rounded-lg border border-border bg-card px-5 py-4 flex flex-col sm:flex-row items-center gap-3 sm:gap-6">
           <div className="flex items-center gap-2 text-muted-foreground text-sm">
@@ -480,6 +668,14 @@ export default function RiderRecords() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Record detail modal */}
+      {detailRecord && (
+        <RecordDetailModal
+          record={detailRecord}
+          onClose={() => setDetailRecord(null)}
+        />
       )}
     </div>
   );

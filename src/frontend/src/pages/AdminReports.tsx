@@ -21,14 +21,18 @@ import {
 } from "@/components/ui/table";
 import {
   AlertTriangle,
+  Camera,
+  CheckCircle2,
   Download,
+  Eye,
   FileSpreadsheet,
   FileText,
   Filter,
-  Image,
   Trash2,
+  X,
 } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Bar,
   BarChart,
@@ -45,6 +49,7 @@ import {
 import { toast } from "sonner";
 import { IssueFlag } from "../backend";
 import type { TestPurpose, TestRecord, TestingMode } from "../backend";
+import { PhotoGallery } from "../components/PhotoGallery";
 import { useAuth } from "../hooks/useAuth";
 import { useDeleteTestRecord, useTestRecords } from "../hooks/useBackend";
 
@@ -87,6 +92,196 @@ function getRideDate(record: {
     return Number(record.dateOfRide) / 1_000_000;
   }
   return Number(record.timestamp) / 1_000_000;
+}
+
+function issueFlagName(flag: unknown): string {
+  if (typeof flag === "string") return flag;
+  if (flag && typeof flag === "object") {
+    const keys = Object.keys(flag as object);
+    if (keys.length > 0) return keys[0];
+  }
+  return String(flag);
+}
+
+/** Render first issue description truncated; show "+N more" if multiple */
+function formatIssueCell(issues: TestRecord["issues"]): React.ReactNode {
+  if (issues.length === 0)
+    return <span className="text-xs text-muted-foreground">—</span>;
+  const first = issues[0];
+  const flag = issueFlagName(first.flag);
+  const desc = first.description ? `: ${first.description}` : "";
+  const label = `[${flag}]${desc}`;
+  const rest = issues.length - 1;
+  return (
+    <span className="inline-flex items-start gap-1 text-xs text-destructive">
+      <AlertTriangle size={11} className="mt-0.5 shrink-0" />
+      <span className="min-w-0">
+        <span className="line-clamp-1 break-all">{label}</span>
+        {rest > 0 && (
+          <span className="text-muted-foreground ml-1">+{rest} more</span>
+        )}
+      </span>
+    </span>
+  );
+}
+
+/** Full record detail modal — rendered via portal to document.body */
+function RecordDetailModal({
+  record,
+  onClose,
+}: {
+  record: TestRecord;
+  onClose: () => void;
+}) {
+  const date = new Date(getRideDate(record));
+
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [onClose]);
+
+  const fields: { label: string; value: React.ReactNode }[] = [
+    {
+      label: "Date of Ride",
+      value: date.toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+      }),
+    },
+    { label: "Rider", value: record.riderName },
+    { label: "Vehicle Model", value: record.vehicleModelName },
+    {
+      label: "Route",
+      value: record.customRoute
+        ? `${record.routeName} (Custom: ${record.customRoute})`
+        : record.routeName,
+    },
+    {
+      label: "Range",
+      value: `${record.rangeStartKm} km → ${record.rangeStopKm} km (${(record.rangeStopKm - record.rangeStartKm).toFixed(1)} km)`,
+    },
+    {
+      label: "Start SOC",
+      value: record.startSoc != null ? `${record.startSoc}%` : "—",
+    },
+    {
+      label: "Stop SOC",
+      value: record.stopSoc != null ? `${record.stopSoc}%` : "—",
+    },
+    { label: "Top Speed", value: `${record.topSpeedKmh} km/h` },
+    { label: "Avg Speed", value: `${record.avgSpeedKmh} km/h` },
+    { label: "Testing Mode", value: formatTestingMode(record.testingMode) },
+    {
+      label: "Rider Weight",
+      value: record.riderWeight != null ? `${record.riderWeight} kg` : "—",
+    },
+    {
+      label: "Co-rider Weight",
+      value: record.coRiderWeight != null ? `${record.coRiderWeight} kg` : "—",
+    },
+    { label: "Test Purpose", value: formatTestPurpose(record.testPurpose) },
+  ];
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+      data-ocid="admin-record-detail-modal"
+    >
+      <div
+        className="absolute inset-0 bg-black/50"
+        onClick={onClose}
+        onKeyDown={(e) => e.key === "Enter" && onClose()}
+        role="button"
+        tabIndex={-1}
+        aria-label="Close details"
+      />
+      <div className="relative z-10 w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl bg-background border border-border shadow-xl">
+        <div className="sticky top-0 bg-card border-b border-border px-5 py-4 flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-display font-bold text-foreground">
+              Test Session Details
+            </h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {record.vehicleModelName} · {record.routeName}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="ml-3 p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+            aria-label="Close details"
+            data-ocid="close-admin-record-detail"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <div className="p-5 space-y-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+            {fields.map(({ label, value }) => (
+              <div key={label}>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide mb-0.5">
+                  {label}
+                </p>
+                <p className="text-sm font-medium text-foreground">{value}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Issues */}
+          <div>
+            <p className="text-xs text-muted-foreground uppercase tracking-wide mb-2">
+              Issues ({record.issues.length})
+            </p>
+            {record.issues.length === 0 ? (
+              <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                <CheckCircle2 size={14} className="text-green-600" />
+                No issues reported
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                {record.issues.map((issue, i) => (
+                  <div
+                    key={`issue-${issueFlagName(issue.flag)}-${i}`}
+                    className="flex items-start gap-2 rounded-lg bg-destructive/5 border border-destructive/15 px-3 py-2"
+                  >
+                    <AlertTriangle
+                      size={13}
+                      className="text-destructive mt-0.5 shrink-0"
+                    />
+                    <div className="min-w-0">
+                      <span className="text-xs font-semibold text-destructive">
+                        {issueFlagName(issue.flag)}
+                      </span>
+                      {issue.description && (
+                        <p className="text-xs text-muted-foreground mt-0.5 break-words">
+                          {issue.description}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Photos */}
+          {record.photoUrls && record.photoUrls.length > 0 && (
+            <div>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide mb-2">
+                Photos ({record.photoUrls.length})
+              </p>
+              <PhotoGallery urls={record.photoUrls} maxVisible={8} />
+            </div>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
 }
 
 // ─── Chart helpers ────────────────────────────────────────────────────────────
@@ -158,9 +353,28 @@ function buildFilterSummary(ctx: ExportContext): string {
   return parts.length > 0 ? parts.join("  |  ") : "No filters applied";
 }
 
+/** Fetch a URL (HTTP or data URI) and return a base64 PNG/JPEG data URI */
+async function fetchPhotoAsDataUrl(url: string): Promise<string | null> {
+  try {
+    // Already a data URI
+    if (url.startsWith("data:")) return url;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
 function exportToPdf(ctx: ExportContext) {
   Promise.all([import("jspdf"), import("jspdf-autotable")]).then(
-    ([{ default: jsPDF }, { default: autoTable }]) => {
+    async ([{ default: jsPDF }, { default: autoTable }]) => {
       const doc = new jsPDF({ orientation: "landscape", format: "a4" });
       const pageW = doc.internal.pageSize.width;
       const pageH = doc.internal.pageSize.height;
@@ -294,6 +508,97 @@ function exportToPdf(ctx: ExportContext) {
         doc.setTextColor(0, 200, 170);
         doc.text("Issue Frequency by Type", 206, chartY + 8);
         doc.addImage(ctx.issueChartImg, "PNG", 206, chartY + 10, 75, 45);
+      }
+
+      // ── Photos section ──
+      const recordsWithPhotos = ctx.records.filter(
+        (r) => r.photoUrls && r.photoUrls.length > 0,
+      );
+      if (recordsWithPhotos.length > 0) {
+        doc.addPage();
+        doc.setFillColor(10, 25, 35);
+        doc.rect(0, 0, pageW, 18, "F");
+        doc.setTextColor(0, 220, 180);
+        doc.setFontSize(11);
+        doc.setFont("helvetica", "bold");
+        doc.text("Session Photos", 14, 12);
+
+        let photoY = 24;
+        const photoW = 55;
+        const photoH = 38;
+        const photoCols = Math.floor((pageW - 28) / (photoW + 6));
+        let photoCol = 0;
+
+        for (let ri = 0; ri < recordsWithPhotos.length; ri++) {
+          const rec = recordsWithPhotos[ri];
+          const recIdx = ctx.records.indexOf(rec) + 1;
+          const dateStr = new Date(getRideDate(rec)).toLocaleDateString();
+          const heading = `Record #${recIdx} — ${rec.vehicleModelName}  ${dateStr}`;
+
+          // Section heading for this record
+          if (photoCol !== 0) {
+            photoY += photoH + 14;
+            photoCol = 0;
+          }
+          if (photoY + 6 > pageH - 20) {
+            doc.addPage();
+            photoY = 14;
+          }
+          doc.setFontSize(7.5);
+          doc.setFont("helvetica", "bold");
+          doc.setTextColor(0, 200, 170);
+          doc.text(heading, 14, photoY);
+          photoY += 5;
+          doc.setFont("helvetica", "normal");
+
+          for (const photoUrl of rec.photoUrls) {
+            if (photoY + photoH + 4 > pageH - 20) {
+              doc.addPage();
+              photoY = 14;
+              photoCol = 0;
+            }
+            const x = 14 + photoCol * (photoW + 6);
+            try {
+              const dataUrl = await fetchPhotoAsDataUrl(photoUrl);
+              if (dataUrl) {
+                // Detect format
+                const fmt = dataUrl.startsWith("data:image/png")
+                  ? "PNG"
+                  : "JPEG";
+                doc.addImage(dataUrl, fmt, x, photoY, photoW, photoH);
+              } else {
+                // placeholder box on failure
+                doc.setDrawColor(80, 100, 100);
+                doc.setFillColor(20, 35, 42);
+                doc.roundedRect(x, photoY, photoW, photoH, 2, 2, "FD");
+                doc.setFontSize(6);
+                doc.setTextColor(100, 140, 135);
+                doc.text(
+                  "Photo unavailable",
+                  x + photoW / 2,
+                  photoY + photoH / 2,
+                  {
+                    align: "center",
+                  },
+                );
+              }
+            } catch {
+              // skip failed photo silently
+            }
+            photoCol++;
+            if (photoCol >= photoCols) {
+              photoCol = 0;
+              photoY += photoH + 6;
+            }
+          }
+          // Advance past last row of photos for this record
+          if (photoCol > 0) {
+            photoY += photoH + 10;
+            photoCol = 0;
+          } else {
+            photoY += 4;
+          }
+        }
       }
 
       // ── Footer on each page ──
@@ -474,6 +779,20 @@ function exportToExcel(ctx: ExportContext) {
     wsSummary["!cols"] = [{ wch: 28 }, { wch: 16 }];
     XLSX.utils.book_append_sheet(wb, wsSummary, "Summary");
 
+    // Photos reference sheet
+    const photoRows: (string | number)[][] = [
+      ["Record#", "VehicleName", "DateOfRide", "PhotoURL"],
+    ];
+    ctx.records.forEach((r, i) => {
+      const dateStr = new Date(getRideDate(r)).toLocaleDateString();
+      for (const url of r.photoUrls) {
+        photoRows.push([i + 1, r.vehicleModelName, dateStr, url]);
+      }
+    });
+    const wsPhotos = XLSX.utils.aoa_to_sheet(photoRows);
+    wsPhotos["!cols"] = [{ wch: 10 }, { wch: 22 }, { wch: 14 }, { wch: 80 }];
+    XLSX.utils.book_append_sheet(wb, wsPhotos, "Photos");
+
     XLSX.writeFile(
       wb,
       `OPG-Mobility-Report-${new Date().toISOString().slice(0, 10)}.xlsx`,
@@ -494,6 +813,8 @@ export default function AdminReports() {
   const [filterRider, setFilterRider] = useState("");
   const [filterDateFrom, setFilterDateFrom] = useState("");
   const [filterDateTo, setFilterDateTo] = useState("");
+  const [detailRecord, setDetailRecord] = useState<TestRecord | null>(null);
+  const [expandedRecord, setExpandedRecord] = useState<string | null>(null);
 
   const speedChartRef = useRef<HTMLDivElement>(null);
   const rangeChartRef = useRef<HTMLDivElement>(null);
@@ -855,7 +1176,7 @@ export default function AdminReports() {
                 <div className="overflow-x-auto">
                   <div className="min-w-[280px]">
                     <ResponsiveContainer width="100%" height={180}>
-                      <BarChart data={rangeSocData}>
+                      <LineChart data={rangeSocData}>
                         <CartesianGrid
                           strokeDasharray="3 3"
                           stroke={CHART_GRID}
@@ -873,25 +1194,31 @@ export default function AdminReports() {
                           labelStyle={{ color: "oklch(0.145 0 0)" }}
                         />
                         <Legend wrapperStyle={{ fontSize: 10 }} />
-                        <Bar
+                        <Line
+                          type="monotone"
                           dataKey="range"
-                          fill="oklch(0.45 0.15 230)"
-                          radius={[3, 3, 0, 0]}
+                          stroke="oklch(0.45 0.15 230)"
+                          strokeWidth={2}
+                          dot={false}
                           name="Range (km)"
                         />
-                        <Bar
+                        <Line
+                          type="monotone"
                           dataKey="startSoc"
-                          fill="oklch(0.60 0.18 200)"
-                          radius={[3, 3, 0, 0]}
+                          stroke="oklch(0.60 0.18 200)"
+                          strokeWidth={2}
+                          dot={false}
                           name="Start SOC%"
                         />
-                        <Bar
+                        <Line
+                          type="monotone"
                           dataKey="stopSoc"
-                          fill="oklch(0.72 0.18 110)"
-                          radius={[3, 3, 0, 0]}
+                          stroke="oklch(0.72 0.18 110)"
+                          strokeWidth={2}
+                          dot={false}
                           name="Stop SOC%"
                         />
-                      </BarChart>
+                      </LineChart>
                     </ResponsiveContainer>
                   </div>
                 </div>
@@ -1045,98 +1372,149 @@ export default function AdminReports() {
                     <TableHead className="text-xs text-muted-foreground">
                       Date
                     </TableHead>
-                    <TableHead className="w-8" />
+                    <TableHead className="w-20 text-xs text-muted-foreground">
+                      Actions
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filtered.map((record) => (
-                    <TableRow
-                      key={record.id.toString()}
-                      className="border-border hover:bg-muted/30"
-                      data-ocid={`report-row-${record.id}`}
-                    >
-                      <TableCell className="font-medium text-sm">
-                        {record.riderName}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground max-w-[120px] truncate">
-                        {record.vehicleModelName}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground max-w-[100px] truncate">
-                        {record.routeName}
-                      </TableCell>
-                      <TableCell className="text-right text-sm font-mono text-muted-foreground whitespace-nowrap">
-                        {record.rangeStartKm}→{record.rangeStopKm}
-                      </TableCell>
-                      <TableCell className="text-right text-sm font-medium">
-                        {formatSoc(record.startSoc)}
-                      </TableCell>
-                      <TableCell className="text-right text-sm font-medium">
-                        {formatSoc(record.stopSoc)}
-                      </TableCell>
-                      <TableCell className="text-right text-sm">
-                        {record.topSpeedKmh}
-                      </TableCell>
-                      <TableCell className="text-right text-sm">
-                        {record.avgSpeedKmh}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                        {formatTestingMode(record.testingMode)}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground whitespace-nowrap max-w-[100px] truncate">
-                        {formatTestPurpose(record.testPurpose)}
-                      </TableCell>
-                      <TableCell className="text-right text-sm text-muted-foreground">
-                        {record.riderWeight != null
-                          ? `${record.riderWeight} kg`
-                          : "—"}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {record.photoUrls.length > 0 ? (
-                          <span className="inline-flex items-center gap-1 text-xs text-primary">
-                            <Image size={11} />
-                            <span>{record.photoUrls.length}</span>
-                          </span>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">
-                            —
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {record.issues.length > 0 ? (
-                          <span className="inline-flex items-center gap-1 text-xs text-accent">
-                            <AlertTriangle size={11} />
-                            <span>{record.issues.length}</span>
-                          </span>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">
-                            —
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                        {new Date(getRideDate(record)).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                          onClick={() => handleDelete(record)}
-                          data-ocid={`delete-record-${record.id}`}
-                          aria-label="Delete record"
+                  {filtered.map((record) => {
+                    const recId = record.id.toString();
+                    const isExpanded = expandedRecord === recId;
+                    const hasPhotos =
+                      record.photoUrls && record.photoUrls.length > 0;
+                    return (
+                      <Fragment key={recId}>
+                        <TableRow
+                          className="border-border hover:bg-muted/30"
+                          data-ocid={`report-row-${record.id}`}
                         >
-                          <Trash2 size={13} />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                          <TableCell className="font-medium text-sm">
+                            {record.riderName}
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground max-w-[120px] truncate">
+                            {record.vehicleModelName}
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground max-w-[100px] truncate">
+                            {record.routeName}
+                          </TableCell>
+                          <TableCell className="text-right text-sm font-mono text-muted-foreground whitespace-nowrap">
+                            {record.rangeStartKm}→{record.rangeStopKm}
+                          </TableCell>
+                          <TableCell className="text-right text-sm font-medium">
+                            {formatSoc(record.startSoc)}
+                          </TableCell>
+                          <TableCell className="text-right text-sm font-medium">
+                            {formatSoc(record.stopSoc)}
+                          </TableCell>
+                          <TableCell className="text-right text-sm">
+                            {record.topSpeedKmh}
+                          </TableCell>
+                          <TableCell className="text-right text-sm">
+                            {record.avgSpeedKmh}
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                            {formatTestingMode(record.testingMode)}
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground whitespace-nowrap max-w-[100px] truncate">
+                            {formatTestPurpose(record.testPurpose)}
+                          </TableCell>
+                          <TableCell className="text-right text-sm text-muted-foreground">
+                            {record.riderWeight != null
+                              ? `${record.riderWeight} kg`
+                              : "—"}
+                          </TableCell>
+                          {/* Bug 2 fix: clickable photo badge */}
+                          <TableCell className="text-center">
+                            {hasPhotos ? (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setExpandedRecord(isExpanded ? null : recId)
+                                }
+                                className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-medium transition-smooth bg-primary/8 hover:bg-primary/15 px-2 py-1 rounded-md"
+                                aria-label="Toggle photos"
+                                data-ocid={`toggle-photos-${recId}`}
+                              >
+                                <Camera size={11} />
+                                <span>{record.photoUrls.length}</span>
+                              </button>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">
+                                —
+                              </span>
+                            )}
+                          </TableCell>
+                          {/* Bug 3 fix: show issue text not count */}
+                          <TableCell className="max-w-[180px]">
+                            {formatIssueCell(record.issues)}
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                            {new Date(getRideDate(record)).toLocaleDateString()}
+                          </TableCell>
+                          {/* Bug 1 fix: Eye/Details button + Delete */}
+                          <TableCell>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => setDetailRecord(record)}
+                                className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-medium transition-smooth bg-primary/8 hover:bg-primary/15 px-2 py-1 rounded-md"
+                                aria-label="View full record details"
+                                data-ocid={`view-details-${recId}`}
+                              >
+                                <Eye size={11} />
+                                Details
+                              </button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                                onClick={() => handleDelete(record)}
+                                data-ocid={`delete-record-${record.id}`}
+                                aria-label="Delete record"
+                              >
+                                <Trash2 size={13} />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                        {/* Bug 2 fix: inline photo gallery row */}
+                        {isExpanded && hasPhotos && (
+                          <TableRow
+                            key={`${recId}-photos`}
+                            className="border-border bg-muted/10"
+                          >
+                            <TableCell colSpan={15} className="py-3 px-4">
+                              <div className="flex items-center gap-2 mb-1">
+                                <Camera
+                                  size={13}
+                                  className="text-muted-foreground"
+                                />
+                                <span className="text-xs text-muted-foreground font-medium">
+                                  Session captures ({record.photoUrls.length})
+                                </span>
+                              </div>
+                              <PhotoGallery urls={record.photoUrls} />
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </Fragment>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
           )}
         </CardContent>
       </Card>
+
+      {/* Bug 1 fix: record detail modal */}
+      {detailRecord && (
+        <RecordDetailModal
+          record={detailRecord}
+          onClose={() => setDetailRecord(null)}
+        />
+      )}
     </div>
   );
 }

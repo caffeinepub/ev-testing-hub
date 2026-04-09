@@ -4,11 +4,11 @@ import UserTypes "types/users";
 import TestingMixin "mixins/testing-api";
 import UsersMixin "mixins/users-api";
 import UserLib "lib/users";
-import Migration "migration";
 
 
 
-(with migration = Migration.run)
+
+
 actor {
   let testRecords = List.empty<TestingTypes.TestRecord>();
   let vehicleModels = List.empty<TestingTypes.VehicleModel>();
